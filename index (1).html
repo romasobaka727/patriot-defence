@@ -1,0 +1,204 @@
+
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <title>Patriot Defence</title>
+  <style>
+    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #e6f2ff; }
+    #info { margin: 10px; font-size: 18px; }
+    #grid {
+      position: relative;
+      width: 600px;
+      height: 360px;
+      background: #dde;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 2px;
+    }
+    .cell {
+      background: #fff;
+      border: 1px solid #aaa;
+      position: relative;
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      cursor: pointer;
+    }
+    .unit, .enemy {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      text-align: center;
+      font-size: 14px;
+      line-height: 60px;
+      font-weight: bold;
+      color: #222;
+      pointer-events: none;
+      user-select: none;
+    }
+    .hp-bar {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      right: 2px;
+      height: 6px;
+      background: #f00;
+    }
+    .hp-bar div {
+      height: 100%;
+      background: #0f0;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    Хвиля: <span id="wave">1</span> |
+    Монети: <span id="coins">1500</span>
+    <button onclick="startNextWave()">▶ Почати хвилю</button>
+  </div>
+  <div id="grid"></div>
+
+  <script>
+    const COLS = 10, ROWS = 6, CELL_W = 60, CELL_H = 60;
+    let wave = 1, coins = 1500, grid = [], enemies = [], units = [];
+
+    const specs = {
+      allies: {
+        shabla: { hp: Infinity, dmg: 10, range: 100, speed: 0.5, price: 500, targets: ['all'] },
+        infantry: { hp: 75, dmg: 8, range: 70, speed: 1, price: 200, targets: ['infantry'] },
+        ship: { hp: 350, dmg: 50, range: 150, speed: 3, price: 1000, targets: ['drone', 'infantry', 'ship'] },
+        mina: { hp: 1, dmg: 1000, range: 50, speed: 9999, price: 600, targets: ['ship', 'submarine'], oneTime: true }
+      },
+      enemies: {
+        drone: { hp: 100, dmg: 999, range: 0, speed: 3, reward: 50 },
+        infantry: { hp: 50, dmg: 10, range: 70, speed: 1, reward: 100 },
+        ship: { hp: 300, dmg: 50, range: 150, speed: 2, reward: 1000 },
+        submarine: { hp: 400, dmg: 100, range: 999, speed: 1, reward: 500 },
+        drone_missile: { hp: 100, dmg: 999, range: 0, speed: 2, reward: 300 }
+      }
+    };
+
+    const gridEl = document.getElementById('grid');
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        let div = document.createElement('div');
+        div.className = 'cell';
+        div.dataset.r = r; div.dataset.c = c;
+        div.onclick = () => addUnit(r, c);
+        gridEl.appendChild(div);
+        grid.push(div);
+      }
+    }
+
+    function addUnit(r, c) {
+      const sel = prompt("Оберіть юніт: shabla, infantry, ship, mina");
+      if (!specs.allies[sel]) return alert("Невірний юніт!");
+      let sp = specs.allies[sel];
+      if (coins < sp.price) return alert("Недостатньо монет!");
+      const cell = grid[r * COLS + c];
+      if (cell.querySelector('.unit')) return alert("Тут вже є юніт!");
+      coins -= sp.price; updateInfo();
+      let u = { ...sp, r, c, x: c * CELL_W, y: r * CELL_H, type: sel, hp: sp.hp };
+      units.push(u);
+      drawUnit(u);
+    }
+
+    function drawUnit(u) {
+      let el = document.createElement('div');
+      el.className = 'unit';
+      el.innerText = u.type;
+      el.style.left = u.x + 'px';
+      el.style.top = u.y + 'px';
+      u.el = el;
+      gridEl.appendChild(el);
+    }
+
+    function startNextWave() {
+      wave++; updateInfo();
+      spawnEnemies();
+      playWave();
+    }
+
+    function spawnEnemies() {
+      enemies = [];
+      for (let i = 0; i < wave * 3; i++) {
+        const types = ['drone', 'infantry', 'ship', 'submarine'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        let sp = specs.enemies[type];
+        let e = { ...sp, x: 0, y: Math.floor(Math.random() * ROWS) * CELL_H, type, hp: sp.hp, maxHp: sp.hp };
+        enemies.push(e);
+        drawEnemy(e);
+      }
+    }
+
+    function drawEnemy(e) {
+      let el = document.createElement('div');
+      el.className = 'enemy';
+      el.innerText = e.type;
+      el.style.left = e.x + 'px';
+      el.style.top = e.y + 'px';
+      const bar = document.createElement('div'); bar.className = 'hp-bar';
+      const barf = document.createElement('div'); barf.style.width = '100%';
+      bar.appendChild(barf);
+      el.appendChild(bar);
+      e.el = el;
+      e.hpBar = barf;
+      gridEl.appendChild(el);
+    }
+
+    function playWave() {
+      const iv = setInterval(() => {
+        enemies.forEach(e => {
+          e.x += e.speed;
+          if (e.el) e.el.style.left = e.x + 'px';
+        });
+
+        units.forEach(u => {
+          enemies.forEach(e => {
+            const dist = Math.hypot((u.c * CELL_W - e.x), (u.r * CELL_H - e.y));
+            if (dist <= u.range && e.hp > 0 && (u.targets.includes('all') || u.targets.includes(e.type))) {
+              if (!u.ready) u.ready = Date.now();
+              if (Date.now() - u.ready >= u.speed * 1000) {
+                e.hp -= u.dmg; u.ready = Date.now();
+                if (e.hpBar) e.hpBar.style.width = Math.max(0, (e.hp / e.maxHp) * 100) + '%';
+                if (u.oneTime && e.hp <= 0) {
+                  if (u.el) gridEl.removeChild(u.el);
+                  units = units.filter(unit => unit !== u);
+                }
+              }
+            }
+          });
+        });
+
+        enemies = enemies.filter(e => {
+          if (e.hp < 1 || e.x > COLS * CELL_W) {
+            if (e.el) gridEl.removeChild(e.el);
+            if (e.hp < 1) coins += specs.enemies[e.type].reward;
+            updateInfo();
+            return false;
+          }
+          return true;
+        });
+
+        if (enemies.length === 0) {
+          clearInterval(iv);
+          alert("Хвиля " + wave + " завершена!");
+        }
+      }, 50);
+    }
+
+    function updateInfo() {
+      document.getElementById('wave').innerText = wave;
+      document.getElementById('coins').innerText = coins;
+    }
+
+    window.onload = () => { updateInfo(); };
+  </script>
+</body>
+</html>
